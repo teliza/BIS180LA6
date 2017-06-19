@@ -1,0 +1,207 @@
+# Assignment 6 RNAseq PArt 2
+
+Student Name: Eliza Tsang
+Student ID: 999606858
+
+__Exercise 1__:  
+__a)__ Use `merge()` to add gene descriptions for the genes found to be regulated by the DP treatment.  Output a table of the top 10 genes that includes the output from edgeR and the descriptions.  __Important: Pay attention to the "sort="" argument to `merge()`.  Should it be TRUE or FALSE?
+
+```{r}
+help(merge)
+help(read.table)
+
+read.csv("~/Assignment_6_Tsang.Eliza/Brapa_reference/FileS9.txt")
+gene.description<-read.table("~/Assignment_6_Tsang.Eliza/Brapa_reference/FileS9.txt", sep="\t")
+Dgenestrt<-read.csv("DEgenes.trt.csv")
+Dgenestrtinteract<-read.csv("DEgenes.trt.interaction.csv")
+```
+```{r}
+head(gene.description)
+DEgene.description<-merge(Dgenestrt,gene.description, sort=FALSE, by.x="X",by.y="V1")
+head(DEgene.description, n=10)
+```
+
+
+__b.__ Repeat this for  genes with a genotype x trt interaction.
+
+```{r}
+head(Dgenestrtinteract)
+DEgene.interaction<-merge(Dgenestrtinteract,gene.description, sort=FALSE,by.x="X",by.y="V1")
+head(DEgene.interaction, n=10)
+```
+
+We filled sort as FALSE to keep our data in the same order we originally had in the DEgene files from the previous half of the assignment.
+
+__Exercise 2__
+
+```{r}
+library(goseq)
+go.terms <- read.delim("Brapa_reference/FileS11.txt",header=FALSE,as.is=TRUE)
+head(go.terms)
+names(go.terms) <- c("GeneID","GO")
+summary(go.terms)
+
+expressed.genes <- read.delim("internode_expressed_genes.txt",as.is=TRUE)
+head(expressed.genes)
+names(expressed.genes) <- "GeneID"
+
+gene.lengths <- read.table("Brapa_reference/Brapa_CDS_lengths.txt",as.is=TRUE)
+head(gene.lengths)
+summary(gene.lengths)
+```
+
+```{r}
+gene.lengths.vector <- gene.lengths$Length[gene.lengths$GeneID %in% expressed.genes$GeneID]
+names(gene.lengths.vector) <- gene.lengths$GeneID[gene.lengths$GeneID %in% expressed.genes$GeneID]
+head(gene.lengths.vector)
+```
+
+```{r}
+expressed.genes.match <- expressed.genes[expressed.genes$GeneID %in% names(gene.lengths.vector),]
+head(expressed.genes.match)
+```
+
+```{r}
+go.list <- strsplit(go.terms$GO,split=",")
+names(go.list) <- go.terms$GeneID
+head(go.list)
+```
+
+```{r}
+DE.interaction <- expressed.genes.match %in% (DEgene.interaction$X) 
+names(DE.interaction) <- expressed.genes.match
+head(DE.interaction)
+```
+```{r}
+DE.interaction <- as.numeric(DE.interaction) 
+head(DE.interaction)
+sum(DE.interaction) 
+```
+
+```{r}
+nullp.result <- nullp(DEgenes = DE.interaction,bias.data = gene.lengths.vector)
+rownames(nullp.result) <- names(gene.lengths.vector)
+GO.out <- goseq(pwf = nullp.result,gene2cat = go.list,test.cats=("GO:BP"))
+
+GO.out[GO.out$over_represented_pvalue < 0.05,]
+```
+
+```{r}
+write.table(GO.out[GO.out$over_represented_pvalue < 0.05,1:2],row.names=FALSE,file="GO_terms.txt", quote = FALSE,col.names = FALSE)
+head(GO.out)
+```
+
+
+
+__a:__ In REVIGO display a "TreeMap" of the BP GO terms.  Was our hypothesis that cell wall genes are enriched in the genotype X treatment gene set correct?  You DO NOT need to include the treemap in your answer.
+
+In my data, the plant cell wall category is not present. Instead, the biggest categories include: response to virus, polarity specification of adacial/abaxial axis, and allantoin catabolism. From what I have, it does not seem the cell wall genes are enriched in the genotype X treatment. 
+
+__b:__ Display a "TreeMap" of the CC GO terms.  There are four general categories shown, some with sub-categories.  What are the two general categories with the largest number of sub categories?  How might these general categories relate to differences in plant growth?  You DO NOT need to include the treemap in your answer.
+
+Endosome membrane,
+cAMP-dependent protein kinase complex
+
+The development of the membrane is important in strengthening the cell wall or creating a barrier or wall for different directions or lengths of growth in plants. 
+
+cAMP protein kinases are part of signaling and transportation of necessary molecules around the cell so it can help transfer the materials a plant needs to different parts of the cells.
+
+```{r}
+library(Biostrings) 
+
+promoters <- readDNAStringSet("/home/ubuntu/Assignment_6_Tsang.Eliza/Brapa_reference/BrapaV1.5_1000bp_upstream.fa.gz")
+promoters <- DNAStringSet(gsub("N","-",promoters))
+head(promoters)
+summary(promoters)
+```
+
+```{r}
+motifs <- read.delim("/home/ubuntu/Assignment_6_Tsang.Eliza/Brapa_reference/element_name_and_motif_IUPACsupp.txt",header=FALSE,as.is=TRUE)
+head(motifs)
+motifsV <- as.character(motifs[,2])
+names(motifsV) <- motifs[,1]
+motifsSS <- DNAStringSet(motifsV)
+motifsSS
+
+DEgene.interaction.match <-(DEgene.interaction$X)[(DEgene.interaction$X) %in% names(promoters)]
+
+universe.promoters <- promoters[expressed.genes.match]
+target.promoters <- promoters[DEgene.interaction.match]
+```
+
+```{r}
+motifEnrichment <- function(target.promoters,universe.promoters,all.counts=F,motifs=motifsSS) {
+  
+  target.counts <- vcountPDict(motifs,target.promoters,fixed=F) + 
+    vcountPDict(motifsSS,reverseComplement(target.promoters),fixed=F)
+  universe.counts <- vcountPDict(motifs,universe.promoters,fixed=F) + 
+    vcountPDict(motifsSS,reverseComplement(universe.promoters),fixed=F)
+  
+  if (all.counts) { 
+    target.counts.sum <- apply(target.counts,1,sum)
+    universe.counts.sum <- apply(universe.counts,1,sum)
+  } else {
+    target.counts.sum <- apply(ifelse(target.counts > 0,1,0),1,sum)
+    universe.counts.sum <- apply(ifelse(universe.counts > 0 , 1, 0),1,sum)
+  }
+  n.motifs <- length(target.counts.sum)
+  results <- vector(mode="numeric",length=n.motifs)
+  for (i in 1:n.motifs) {
+    if (all.counts) { #the contigency tables are different depending on whether we are looking at promoters or overall occurrences
+      #test if ratio of occurrences to promoters is the same in the target and the universe
+      m <- matrix(c(
+        target.counts.sum[i],                       #number of occurrences within target
+        dim(target.counts)[2],                      #number of promoters in target
+        universe.counts.sum[i],                  #number of occurrences within universe
+        dim(universe.counts)[2]                  #number of promoters in universe
+      ),ncol=2)
+    } else { #looking at promoters with and without hits
+      m <- matrix(c(
+        target.counts.sum[i],                        #number of promoters in target with hit
+        dim(target.counts)[2]-target.counts.sum[i],            #number of promoters in target with no hit
+        universe.counts.sum[i],                   #number of promoters in universe with hit
+        dim(universe.counts)[2]-universe.counts.sum[i]   #number of promoters in universe with no hit
+      ),ncol=2)
+    } #else
+    results[i] <- fisher.test(m,alternative="greater")$p.value
+  } #for loop
+  results.table <- data.frame(
+    motif=names(motifs),
+    universe.percent = round(universe.counts.sum/dim(universe.counts)[2],3)*100,
+    target.percent = round(target.counts.sum/dim(target.counts)[2],3)*100,
+    p.value =  results)
+  results.table <- results.table[order(results.table$p.value),]
+  results.table
+}
+```
+
+```{r}
+motif.results <- motifEnrichment(target.promoters,universe.promoters)
+head(motif.results)
+```
+
+__Exercise 3__   
+__a.__ **How many motifs are enriched at P < 0.05?**
+
+```{r}
+P0.05<-subset(motif.results, p.value<0.05)
+P0.05
+```
+
+6 motifs
+
+__b.__ **What is the identity of the most significantly over-enriched promoter? ** 
+
+AtMYC2 BS in RD22, 
+p.value: 5.444505e-07
+
+__c.__ **What percentage of genes in the "Universe" have this motif?  What percentage in our target set?  **
+
+universe.percent: 35.7,
+target.percent: 46
+
+__d.__ **You can find information on the motifs [here](http://arabidopsis.med.ohio-state.edu/AtcisDB/bindingsites.html).  Do you think that the most enriched motif represents a biologically meaningful result?  Discuss why or why not.**
+
+From the link, I found the consensus sequence: CACATG. 
+
+The motif itself is in a gene that seems to be biologically important for gene expression regulation of abscisic acid and in drought.

@@ -1,0 +1,29 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Bam to read counts
+As you know from last week’s lab, we mapped RNAseq reads to the B. rapa genome. In order to ask if reads are differentially expressed between cultivars (IMB211 vs. R500) or treatments (dense planting vs. non-dense planting) we need to know how many reads were sequenced from each gene.
+
+To do this we use the bam files (telling us where in the genome the reads mapped) and the .gtf file that we just generated (telling us where the genes are) to figure out which reads belong to which genes. Thankfully the Rsubread package does this for us. An alternative workflow (not used here) would be to use the python package HTSeq. Yet another alternative would have been to map our reads to cDNA fasta files and then use samtools idxstats on the bam file.
+
+But for this lab we will use Rsubread on the two files from Thursday. You will need to change the path listed below to make this work. Important: tilde expansion for your home directory will not work in this function. Do not include a “~” in your path. Use relative or the full absolute path
+
+counts.data.normal.melt.sample<-counts.data.normal.melt[sample(nrow(counts.data.normal.melt), 1000),]
+ggplot(counts.data.normal.melt.sample,aes(x=gr_trt, y=counts, fill=gr_trt)) + geom_boxplot() +facet_wrap(facets= ~ gr_trt, ncol=3)
+
+counts.data.log.melt.sample<-counts.data.normal.melt[sample(nrow(counts.data.log.melt), 1000),]
+ggplot(counts.data.log.melt.sample,aes(x=gr_trt, y=counts, fill=gr_trt)) + geom_boxplot() +facet_wrap(facets= ~ gr_trt, ncol=3)
+
+GO term values: number associated with that term
+P-valueo of the GO term is the probability to get that term (0.001 likely to be overexpressed)
+
+REVIGO  Tree map
+  -organized colored regions: rep similar associated terms in simiar hierarchy 
+    -larger box=more sig P-val GO term
+6.1 MDS Plot read    
+    Top to bottom separates two treatments
+    Left and right by r500 and IMB211
+6.1 Common dispersion plot
+  y-axis:CV=std dev/mean; genes higher up on this axis had more variation, genes lower down more similar
+RPKM: nice for visualization but statistically eh
